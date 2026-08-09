@@ -5,6 +5,8 @@
 
 # This workflow will build a Java project with Maven
 
+# This workflow will build a Java project with Maven
+
 name: Java CI
 
 on:
@@ -14,8 +16,8 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
 
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -33,7 +35,6 @@ jobs:
 
 
   security-check:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -51,11 +52,11 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y trivy
 
-    - name: trivy fs scan
+    - name: Trivy FS Scan
       run: trivy fs --scanners vuln --format json -o fs-report.json .
 
-    - name: Gitleaks installation
+    - name: Gitleaks Installation
       run: sudo apt-get install -y gitleaks
 
-    - name: gitleaks code scan
+    - name: Gitleaks Code Scan
       run: gitleaks detect --source . --report-path gitleaks-report.json --report-format json
