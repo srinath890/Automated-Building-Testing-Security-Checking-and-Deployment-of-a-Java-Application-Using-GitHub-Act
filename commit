@@ -1,0 +1,772 @@
+Yes. You want the **complete project process in step-by-step order**, starting from the first step and continuing through:
+
+**Docker Job → EKS Cluster → Kubernetes Job in GitHub Actions.**
+
+I’ll keep the wording simple and explain **what you do, why you do it, and what happens**.
+
+The video you shared is titled **“GitHub Actions CICD Tutorial With Live Project”** and covers the sequence you listed. ([YouTube][1])
+
+# Complete Project Steps
+
+## Step 1 — Create the Java Application
+
+First, create your Java application.
+
+Example:
+
+```text
+Java Application
+       ↓
+Spring Boot
+       ↓
+Maven
+       ↓
+pom.xml
+```
+
+Your project contains:
+
+```text
+project/
+├── src/
+│   ├── main/
+│   │   └── java/
+│   └── test/
+├── pom.xml
+└── ...
+```
+
+### Purpose
+
+This is the actual application that you are going to build and deploy.
+
+---
+
+# Step 2 — Create GitHub Repository
+
+Create a repository in GitHub.
+
+Example:
+
+```text
+Java-Application
+```
+
+Then upload your project:
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin <repository-url>
+git push -u origin main
+```
+
+Now your source code is stored in GitHub.
+
+```text
+Developer
+    ↓
+Git
+    ↓
+GitHub Repository
+```
+
+---
+
+# Step 3 — Create GitHub Actions Workflow
+
+Inside your repository create:
+
+```text
+.github/
+└── workflows/
+    └── ci-cd.yml
+```
+
+This YAML file defines your pipeline.
+
+For example:
+
+```yaml
+name: Java CI/CD
+```
+
+When you push code:
+
+```text
+git push
+    ↓
+GitHub
+    ↓
+GitHub Actions
+    ↓
+Pipeline starts
+```
+
+---
+
+# Step 4 — Run Pipeline on GitHub Shared Runner
+
+Initially you can use:
+
+```yaml
+runs-on: ubuntu-latest
+```
+
+This means GitHub provides the machine for your job.
+
+Example:
+
+```yaml
+build:
+  runs-on: ubuntu-latest
+```
+
+Then:
+
+```yaml
+- uses: actions/checkout@v4
+```
+
+downloads your GitHub repository onto the runner.
+
+Then install Java:
+
+```yaml
+- name: Set up JDK 17
+  uses: actions/setup-java@v4
+  with:
+    java-version: '17'
+    distribution: 'temurin'
+    cache: maven
+```
+
+Then build:
+
+```yaml
+- name: Build
+  run: mvn clean compile
+```
+
+### Flow
+
+```text
+GitHub
+   ↓
+Shared Runner
+   ↓
+Checkout Code
+   ↓
+Install Java
+   ↓
+Maven Build
+```
+
+---
+
+# Step 5 — Configure AWS EC2 as Private Runner
+
+Instead of GitHub's machine, you create an AWS EC2 Ubuntu machine.
+
+Install the required tools:
+
+```text
+EC2 Ubuntu
+│
+├── Git
+├── Java
+├── Maven
+├── Docker
+└── GitHub Actions Runner
+```
+
+Then download the GitHub Actions runner from:
+
+```text
+GitHub Repository
+→ Settings
+→ Actions
+→ Runners
+→ New self-hosted runner
+```
+
+Follow the commands provided by GitHub.
+
+Your runner directory might be:
+
+```bash
+~/actions-runner
+```
+
+Start it:
+
+```bash
+cd ~/actions-runner
+./run.sh
+```
+
+You should see:
+
+```text
+Connected to GitHub
+Listening for Jobs
+```
+
+Then change:
+
+```yaml
+runs-on: ubuntu-latest
+```
+
+to:
+
+```yaml
+runs-on: self-hosted
+```
+
+Now your pipeline executes on your own EC2 machine.
+
+---
+
+# Step 6 — Set Up SonarQube Server
+
+You install SonarQube on the AWS machine.
+
+You used Docker for this:
+
+```bash
+docker run -d \
+  --name sonar \
+  -p 9000:9000 \
+  sonarqube:lts-community
+```
+
+Then check:
+
+```bash
+docker ps
+```
+
+SonarQube is accessed through:
+
+```text
+http://EC2-PUBLIC-IP:9000
+```
+
+You then create a SonarQube project.
+
+Example:
+
+```text
+Project Key:
+Boardgame
+```
+
+For your actual application, use your own project name/key.
+
+---
+
+# Step 7 — Create SonarQube Token
+
+Inside SonarQube:
+
+```text
+My Account
+   ↓
+Security
+   ↓
+Generate Token
+```
+
+Copy the token.
+
+Then in GitHub:
+
+```text
+Repository
+→ Settings
+→ Secrets and variables
+→ Actions
+```
+
+Create:
+
+```text
+SONAR_TOKEN
+```
+
+as a **Secret**.
+
+Also create:
+
+```text
+SONAR_HOST_URL
+```
+
+as a **Variable**.
+
+Example:
+
+```text
+SONAR_HOST_URL=http://EC2-PUBLIC-IP:9000
+```
+
+---
+
+# Step 8 — Add SonarQube Job to Pipeline
+
+Now your pipeline can perform code-quality checking.
+
+For Maven, you can use the Maven Sonar goal:
+
+```bash
+mvn clean verify sonar:sonar \
+  -Dsonar.host.url="${SONAR_HOST_URL}" \
+  -Dsonar.token="${SONAR_TOKEN}"
+```
+
+The process becomes:
+
+```text
+Java Code
+    ↓
+Maven Build
+    ↓
+SonarQube
+    ↓
+Code Quality Analysis
+    ↓
+Quality Gate
+```
+
+SonarQube checks things such as:
+
+```text
+Bugs
+Vulnerabilities
+Code Smells
+Code Quality
+Test Coverage
+```
+
+---
+
+# Step 9 — Add Security Checking
+
+Your project also has security checks.
+
+### Trivy
+
+Trivy checks for known vulnerabilities.
+
+```bash
+trivy fs --scanners vuln .
+```
+
+### Gitleaks
+
+Gitleaks checks whether secrets were accidentally committed:
+
+```bash
+gitleaks detect --source .
+```
+
+So your pipeline becomes:
+
+```text
+Build
+  ↓
+Trivy
+  ↓
+Gitleaks
+  ↓
+Unit Tests
+  ↓
+SonarQube
+```
+
+---
+
+# Step 10 — Set Up Docker Job in Pipeline
+
+This is the step you specifically mentioned at **00:59:20**.
+
+Now you take your Java application and create a Docker image.
+
+First create a `Dockerfile`.
+
+Example:
+
+```dockerfile
+FROM eclipse-temurin:17-jre
+
+WORKDIR /app
+
+COPY target/*.jar app.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+The Maven build produces:
+
+```text
+target/
+   └── application.jar
+```
+
+Docker copies that JAR into the image.
+
+### Pipeline flow
+
+```text
+Java Source Code
+       ↓
+Maven
+       ↓
+JAR file
+       ↓
+Dockerfile
+       ↓
+Docker Build
+       ↓
+Docker Image
+```
+
+Example:
+
+```bash
+docker build -t my-java-app .
+```
+
+Check:
+
+```bash
+docker images
+```
+
+---
+
+# Step 11 — Push Docker Image to Container Registry
+
+You need somewhere to store your Docker image.
+
+For AWS, use:
+
+### Amazon ECR
+
+The flow becomes:
+
+```text
+GitHub Actions
+      ↓
+Docker Build
+      ↓
+Docker Image
+      ↓
+Amazon ECR
+```
+
+Example image:
+
+```text
+123456789012.dkr.ecr.eu-west-1.amazonaws.com/my-java-app:latest
+```
+
+Your Kubernetes cluster will later pull this image from ECR.
+
+---
+
+# Step 12 — Create EKS Kubernetes Cluster
+
+This is the next section you mentioned at **01:04:06**.
+
+Now you create your Kubernetes cluster using:
+
+### Amazon EKS
+
+Architecture:
+
+```text
+AWS
+ │
+ └── EKS Cluster
+       │
+       ├── Control Plane
+       │
+       └── Worker Nodes
+```
+
+The worker nodes are EC2 machines managed as part of the EKS cluster.
+
+Your application will eventually run inside these nodes as Kubernetes Pods.
+
+---
+
+# Step 13 — Configure kubectl
+
+You need `kubectl` to communicate with your EKS cluster.
+
+After the EKS cluster is created, configure your local/runner environment:
+
+```bash
+aws eks update-kubeconfig \
+  --region <region> \
+  --name <cluster-name>
+```
+
+Then test:
+
+```bash
+kubectl get nodes
+```
+
+You should see your EKS worker nodes.
+
+Example:
+
+```text
+NAME                           STATUS
+ip-10-0-1-100.ec2.internal     Ready
+ip-10-0-2-100.ec2.internal     Ready
+```
+
+Now:
+
+```text
+kubectl
+   ↓
+EKS Cluster
+```
+
+---
+
+# Step 14 — Create Kubernetes Deployment
+
+Create:
+
+```text
+deployment.yaml
+```
+
+Example structure:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: java-app
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: java-app
+
+  template:
+    metadata:
+      labels:
+        app: java-app
+
+    spec:
+      containers:
+        - name: java-app
+          image: <ECR-IMAGE>
+          ports:
+            - containerPort: 8080
+```
+
+This tells Kubernetes:
+
+> Run two copies of my application.
+
+So:
+
+```text
+Deployment
+     ↓
+ReplicaSet
+     ↓
+┌─────────┐
+│ Pod 1   │
+└─────────┘
+
+┌─────────┐
+│ Pod 2   │
+└─────────┘
+```
+
+---
+
+# Step 15 — Create Kubernetes Service
+
+Create:
+
+```text
+service.yaml
+```
+
+The Service allows users to access the application.
+
+Example:
+
+```yaml
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: java-app-service
+
+spec:
+  type: LoadBalancer
+
+  selector:
+    app: java-app
+
+  ports:
+    - port: 80
+      targetPort: 8080
+```
+
+Flow:
+
+```text
+Internet
+   ↓
+AWS Load Balancer
+   ↓
+Kubernetes Service
+   ↓
+┌───────┬───────┐
+↓       ↓       ↓
+Pod 1   Pod 2   Pod 3
+```
+
+---
+
+# Step 16 — Kubernetes Job in GitHub Actions
+
+Now the important final step.
+
+Instead of manually doing:
+
+```bash
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+```
+
+you put these commands into GitHub Actions.
+
+For example:
+
+```yaml
+- name: Deploy to EKS
+  run: |
+    kubectl apply -f deployment.yaml
+    kubectl apply -f service.yaml
+```
+
+Now GitHub Actions automatically deploys your new Docker image to EKS.
+
+---
+
+# Final Complete Pipeline
+
+Your entire project becomes:
+
+```text
+                 DEVELOPER
+                     |
+                     ↓
+                  GitHub
+                     |
+                     ↓
+              GitHub Actions
+                     |
+                     ↓
+             AWS Self-Hosted
+                 Runner
+                     |
+          ┌──────────┴──────────┐
+          ↓                     ↓
+       Maven Build          Security
+                              |
+                       ┌──────┴──────┐
+                       ↓             ↓
+                     Trivy        Gitleaks
+                       |
+                       ↓
+                    Testing
+                       |
+                       ↓
+                  SonarQube
+                       |
+                  Quality Gate
+                       |
+                       ↓
+                 Docker Build
+                       |
+                       ↓
+                  Amazon ECR
+                       |
+                       ↓
+                  AWS EKS
+                       |
+                       ↓
+               Kubernetes
+                       |
+                ┌──────┴──────┐
+                ↓             ↓
+             Deployment     Service
+                ↓
+             ReplicaSet
+                ↓
+          ┌─────┼─────┐
+          ↓     ↓     ↓
+        Pod 1 Pod 2 Pod 3
+```
+
+## In simple words — your project does this
+
+**1. Developer writes Java code**
+↓
+**2. Pushes code to GitHub**
+↓
+**3. GitHub Actions starts automatically**
+↓
+**4. AWS EC2 self-hosted runner executes the pipeline**
+↓
+**5. Maven builds the application**
+↓
+**6. Trivy checks vulnerabilities**
+↓
+**7. Gitleaks checks for secrets**
+↓
+**8. Maven runs tests**
+↓
+**9. SonarQube checks code quality**
+↓
+**10. Docker creates an image**
+↓
+**11. Image is pushed to Amazon ECR**
+↓
+**12. GitHub Actions connects to AWS EKS**
+↓
+**13. Kubernetes Deployment creates Pods**
+↓
+**14. Kubernetes Service exposes the application**
+↓
+**15. Application is running in AWS**
+
+### Your project title can therefore be:
+
+> **Automated Building, Testing, Security Checking and Deployment of a Java Application Using GitHub Actions and AWS Cloud**
+
+This title accurately covers the whole process from **GitHub Actions through Docker and EKS/Kubernetes**.
+
+[1]: https://www.youtube.com/watch?v=icZUzgtz_d8 "GitHub Actions CICD Tutorial With Live Project | GitHub Actions - YouTube"
